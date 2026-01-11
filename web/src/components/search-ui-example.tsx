@@ -227,7 +227,35 @@ const SearchPage: React.FC = () => {
       <footer className="bg-white border-t border-gray-200 mt-12">
         <div className="max-w-4xl mx-auto px-4 sm:px-6 lg:px-8 py-6">
           <div className="text-center">
-            <div className="flex items-center justify-center gap-4">
+            <div className="flex flex-wrap items-center justify-center gap-4">
+              <Link
+                to="/"
+                className="text-sm text-gray-500 hover:text-gray-700 transition-colors"
+              >
+                トップページ
+              </Link>
+              <span className="text-gray-300">|</span>
+              <Link
+                to="/about"
+                className="text-sm text-gray-500 hover:text-gray-700 transition-colors"
+              >
+                サービスについて
+              </Link>
+              <span className="text-gray-300">|</span>
+              <Link
+                to="/how-to-use"
+                className="text-sm text-gray-500 hover:text-gray-700 transition-colors"
+              >
+                使い方
+              </Link>
+              <span className="text-gray-300">|</span>
+              <Link
+                to="/faq"
+                className="text-sm text-gray-500 hover:text-gray-700 transition-colors"
+              >
+                よくある質問
+              </Link>
+              <span className="text-gray-300">|</span>
               <Link
                 to="/terms"
                 className="text-sm text-gray-500 hover:text-gray-700 transition-colors"

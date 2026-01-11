@@ -143,6 +143,42 @@ const Terms: React.FC = () => {
 
           <div className="text-center mt-12">
             <p className="text-xl font-semibold text-gray-900 mb-8">以上</p>
+            <div className="flex flex-wrap justify-center gap-4 mb-6">
+              <Link
+                to="/"
+                className="text-blue-600 hover:text-blue-800 underline text-base"
+              >
+                トップページ
+              </Link>
+              <span className="text-gray-400">|</span>
+              <Link
+                to="/search"
+                className="text-blue-600 hover:text-blue-800 underline text-base"
+              >
+                病院検索
+              </Link>
+              <span className="text-gray-400">|</span>
+              <Link
+                to="/about"
+                className="text-blue-600 hover:text-blue-800 underline text-base"
+              >
+                サービスについて
+              </Link>
+              <span className="text-gray-400">|</span>
+              <Link
+                to="/how-to-use"
+                className="text-blue-600 hover:text-blue-800 underline text-base"
+              >
+                使い方
+              </Link>
+              <span className="text-gray-400">|</span>
+              <Link
+                to="/faq"
+                className="text-blue-600 hover:text-blue-800 underline text-base"
+              >
+                よくある質問
+              </Link>
+            </div>
             <Link
               to="/"
               className="inline-block bg-blue-600 text-white px-8 py-3 rounded-md text-lg font-medium hover:bg-blue-700 transition-colors"
