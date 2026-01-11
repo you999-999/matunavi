@@ -316,7 +316,7 @@ const SearchSidebar: React.FC<SearchSidebarProps> = ({
               type="radio"
               value="both"
               checked={searchType === 'both'}
-              onChange={(e) => setSearchType('both')}
+              onChange={() => setSearchType('both')}
               className="mr-3 w-5 h-5"
             />
             <span className="text-lg text-gray-700">すべて</span>
@@ -326,7 +326,7 @@ const SearchSidebar: React.FC<SearchSidebarProps> = ({
               type="radio"
               value="hospital"
               checked={searchType === 'hospital'}
-              onChange={(e) => setSearchType('hospital')}
+              onChange={() => setSearchType('hospital')}
               className="mr-3 w-5 h-5"
             />
             <span className="text-lg text-gray-700">病院</span>
@@ -336,7 +336,7 @@ const SearchSidebar: React.FC<SearchSidebarProps> = ({
               type="radio"
               value="clinic"
               checked={searchType === 'clinic'}
-              onChange={(e) => setSearchType('clinic')}
+              onChange={() => setSearchType('clinic')}
               className="mr-3 w-5 h-5"
             />
             <span className="text-lg text-gray-700">診療所</span>
@@ -1212,188 +1212,5 @@ const FacilityDetail: React.FC<FacilityDetailProps> = ({ facility, onClose }) =>
   );
 };
 
-// ============================================
-// 5. 施設カード
-// ============================================
-
-const FacilityCard: React.FC = () => {
-  return (
-    <div className="bg-white rounded-lg shadow-sm p-6 hover:shadow-md transition-shadow">
-      <div className="flex items-start justify-between">
-        <div className="flex-1">
-          {/* 施設名とタイプ */}
-          <div className="flex items-center space-x-2 mb-2">
-            <h3 className="text-xl font-semibold text-gray-900">
-              札幌医科大学附属病院
-            </h3>
-            <span className="px-2 py-1 text-xs font-medium bg-blue-100 text-blue-800 rounded">
-              病院
-            </span>
-          </div>
-
-          {/* 住所 */}
-          <p className="text-sm text-gray-600 mb-3">
-            〒060-8543 北海道札幌市中央区南1条西16丁目291番地
-          </p>
-
-          {/* 診療科 */}
-          <div className="mb-3">
-            <p className="text-xs font-medium text-gray-700 mb-1">診療科</p>
-            <div className="flex flex-wrap gap-2">
-              {['内科', '外科', '小児科', '産婦人科'].map((dept) => (
-                <span
-                  key={dept}
-                  className="px-2 py-1 text-xs bg-gray-100 text-gray-700 rounded"
-                >
-                  {dept}
-                </span>
-              ))}
-            </div>
-          </div>
-
-          {/* 診療時間 */}
-          <div className="mb-3">
-            <p className="text-xs font-medium text-gray-700 mb-1">診療時間</p>
-            <div className="text-sm text-gray-600">
-              <div className="flex items-center space-x-4">
-                <span>月〜金: 09:00 - 17:30</span>
-                <span>土: 09:00 - 12:00</span>
-              </div>
-            </div>
-          </div>
-
-          {/* アクション */}
-          <div className="flex items-center space-x-3 mt-4">
-            <button className="px-4 py-2 bg-blue-600 text-white text-sm rounded-md hover:bg-blue-700 transition-colors">
-              詳細を見る
-            </button>
-            <button className="px-4 py-2 border border-gray-300 text-gray-700 text-sm rounded-md hover:bg-gray-50 transition-colors">
-              地図で見る
-            </button>
-          </div>
-        </div>
-
-        {/* 距離・評価 */}
-        <div className="ml-4 text-right">
-          <p className="text-sm text-gray-600 mb-1">距離</p>
-          <p className="text-lg font-semibold text-gray-900">2.3km</p>
-        </div>
-      </div>
-    </div>
-  );
-};
-
-// ============================================
-// 5. 地図表示
-// ============================================
-
-const MapView: React.FC = () => {
-  return (
-    <div className="bg-white rounded-lg shadow-sm overflow-hidden">
-      <div className="h-96 bg-gray-200 flex items-center justify-center">
-        <p className="text-gray-500">地図表示エリア（Google Maps / Mapbox など）</p>
-      </div>
-    </div>
-  );
-};
-
-// ============================================
-// 6. 詳細モーダル（オプション）
-// ============================================
-
-interface FacilityDetailModalProps {
-  isOpen: boolean;
-  onClose: () => void;
-  facilityId: string;
-}
-
-const FacilityDetailModal: React.FC<FacilityDetailModalProps> = ({
-  isOpen,
-  onClose,
-  facilityId,
-}) => {
-  if (!isOpen) return null;
-
-  return (
-    <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
-      <div className="bg-white rounded-lg max-w-4xl w-full mx-4 max-h-[90vh] overflow-y-auto">
-        <div className="p-6">
-          <div className="flex items-center justify-between mb-4">
-            <h2 className="text-2xl font-bold text-gray-900">施設詳細</h2>
-            <button
-              onClick={onClose}
-              className="text-gray-400 hover:text-gray-600"
-            >
-              <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
-              </svg>
-            </button>
-          </div>
-
-          {/* 詳細コンテンツ */}
-          <div className="space-y-6">
-            {/* 基本情報 */}
-            <section>
-              <h3 className="text-lg font-semibold text-gray-900 mb-3">基本情報</h3>
-              <dl className="grid grid-cols-2 gap-4">
-                <div>
-                  <dt className="text-sm font-medium text-gray-500">施設名</dt>
-                  <dd className="text-sm text-gray-900">札幌医科大学附属病院</dd>
-                </div>
-                <div>
-                  <dt className="text-sm font-medium text-gray-500">住所</dt>
-                  <dd className="text-sm text-gray-900">北海道札幌市中央区...</dd>
-                </div>
-              </dl>
-            </section>
-
-            {/* 診療科一覧 */}
-            <section>
-              <h3 className="text-lg font-semibold text-gray-900 mb-3">診療科</h3>
-              <div className="grid grid-cols-3 gap-2">
-                {['内科', '外科', '小児科', '産婦人科', '眼科', '耳鼻咽喉科'].map((dept) => (
-                  <div key={dept} className="p-2 bg-gray-50 rounded text-sm">
-                    {dept}
-                  </div>
-                ))}
-              </div>
-            </section>
-
-            {/* 診療時間表 */}
-            <section>
-              <h3 className="text-lg font-semibold text-gray-900 mb-3">診療時間</h3>
-              <div className="overflow-x-auto">
-                <table className="min-w-full divide-y divide-gray-200">
-                  <thead className="bg-gray-50">
-                    <tr>
-                      <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">曜日</th>
-                      <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">診療時間</th>
-                    </tr>
-                  </thead>
-                  <tbody className="bg-white divide-y divide-gray-200">
-                    {[
-                      { day: '月曜日', time: '09:00 - 17:30' },
-                      { day: '火曜日', time: '09:00 - 17:30' },
-                      { day: '水曜日', time: '09:00 - 17:30' },
-                      { day: '木曜日', time: '09:00 - 17:30' },
-                      { day: '金曜日', time: '09:00 - 17:30' },
-                      { day: '土曜日', time: '09:00 - 12:00' },
-                      { day: '日曜日', time: '休診' },
-                    ].map((row) => (
-                      <tr key={row.day}>
-                        <td className="px-4 py-3 text-sm text-gray-900">{row.day}</td>
-                        <td className="px-4 py-3 text-sm text-gray-600">{row.time}</td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
-              </div>
-            </section>
-          </div>
-        </div>
-      </div>
-    </div>
-  );
-};
 
 export default SearchPage;
