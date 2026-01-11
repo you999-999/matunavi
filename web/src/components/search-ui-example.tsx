@@ -154,15 +154,20 @@ const SearchPage: React.FC = () => {
     <div className="min-h-screen bg-gray-50">
       {/* ヘッダー */}
       <header className="bg-white shadow-sm">
-        <div className="max-w-4xl mx-auto px-4 sm:px-6 lg:px-8 py-8 text-center">
-          <h1 className="text-6xl font-bold text-gray-900 mb-3">
-            まつなび
-          </h1>
-          <p className="text-sm text-gray-500 mb-4 leading-relaxed max-w-2xl mx-auto">
-            まつなびは、政府公開データと利用者の投稿をもとに、
-            <br />
-            病院・診療所の情報や待ち時間の傾向を静かに確認できるサービスです。
-          </p>
+        <div className="max-w-4xl mx-auto px-4 sm:px-6 lg:px-8 py-12 text-center">
+          {/* タイトル部分に背景色を付ける */}
+          <div className="bg-gray-50 rounded-lg px-6 py-8 mb-6">
+            <h1 className="text-6xl font-bold text-gray-900 mb-4">
+              まつなび
+            </h1>
+            <p className="text-sm text-gray-600 leading-loose max-w-2xl mx-auto">
+              まつなびは、政府公開データと利用者の投稿をもとに、
+              <br />
+              病院・診療所の情報や待ち時間の傾向を静かに確認できるサービスです。
+              <br />
+              口コミやランキングに依存せず、参考情報としてご利用ください。
+            </p>
+          </div>
           <h2 className="text-3xl font-semibold text-gray-700">
             病院検索
           </h2>
