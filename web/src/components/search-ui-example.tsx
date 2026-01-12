@@ -157,9 +157,21 @@ const SearchPage: React.FC = () => {
         <div className="max-w-4xl mx-auto px-4 sm:px-6 lg:px-8 py-12 text-center">
           {/* タイトル部分に背景色を付ける */}
           <div className="bg-gray-50 rounded-lg px-6 py-8 mb-6">
-            <h1 className="text-6xl font-bold text-gray-900 mb-4">
-              まつなび
-            </h1>
+            <div className="flex items-baseline justify-center gap-2 mb-4">
+              <h1 className="text-6xl font-bold text-gray-900">
+                まつなび
+              </h1>
+              <img 
+                src="/images/matuneko.png" 
+                alt="まつねこ" 
+                className="h-16 w-auto object-contain"
+                style={{ 
+                  backgroundColor: 'transparent',
+                  display: 'block',
+                  transform: 'translate(-2px, calc(0.2em + 7px))'
+                }}
+              />
+            </div>
             <p className="text-sm text-gray-600 leading-loose max-w-2xl mx-auto">
               まつなびは、政府公開データと利用者の投稿をもとに、
               <br />
