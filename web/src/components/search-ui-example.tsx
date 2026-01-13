@@ -282,6 +282,9 @@ const SearchPage: React.FC = () => {
                 プライバシーポリシー
               </Link>
             </div>
+            <p className="text-sm text-gray-600 font-medium mt-4">
+              ©2026 まつなび
+            </p>
           </div>
         </div>
       </footer>
