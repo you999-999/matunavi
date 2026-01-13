@@ -1,0 +1,439 @@
+プロジェクトの構成を確認し、今後の改善点と追加機能をリストアップします。
+
+[3 tools called]
+
+# まつなび プロジェクト - 今後の改善点と追加機能リスト
+
+## 📂 プロジェクト構成の概要
+- **フロントエンド**: React + Vite + TypeScript + Tailwind CSS
+- **バックエンド**: Supabase (PostgreSQL)
+- **デプロイ**: Vercel
+- **機能**: 病院検索、待ち時間投稿・表示、静的ページ群
+- **その他**: Google AdSense、PWA対応済み
+
+---
+
+## 🔴 緊急度：高（早めに対応すべき）
+
+### 1. **コンポーネント分割 - `search-ui-example.tsx` のリファクタリング**
+**現状**: 1ファイル1265行の巨大コンポーネント  
+**問題点**: 
+- メンテナンス困難
+- 再利用性が低い
+- バグ修正時の影響範囲が不明確
+
+**対応方法**:
+```
+web/src/components/
+├── search/
+│   ├── SearchPage.tsx          # メインコンポーネント（100行程度）
+│   ├── SearchSidebar.tsx       # 検索条件サイドバー
+│   ├── SearchResults.tsx       # 検索結果一覧
+│   ├── FacilityDetail.tsx      # 施設詳細
+│   ├── WaitTimeHeatmap.tsx     # ヒートマップ
+│   ├── WaitTimeForm.tsx        # 待ち時間入力フォーム
+│   └── SuccessModal.tsx        # 成功メッセージモーダル
+```
+
+**手順**:
+1. `SearchSidebar` から切り出し（検索条件UI部分）
+2. `SearchResults` を切り出し（検索結果表示部分）
+3. `FacilityDetail` を切り出し（施設詳細画面）
+4. `WaitTimeHeatmap` を切り出し（ヒートマップ部分）
+5. `WaitTimeForm` を切り出し（フォーム部分）
+6. 各コンポーネントに Props の型定義を明確化
+
+---
+
+### 2. **環境変数の整理**
+**現状**: Supabase の URL/Key がコード内にハードコード  
+**問題点**: セキュリティリスク、環境切り替えが困難
+
+**対応方法**:
+```bash
+# web/.env.local を作成
+VITE_SUPABASE_URL=your_supabase_url
+VITE_SUPABASE_ANON_KEY=your_anon_key
+```
+
+```typescript
+// web/src/lib/supabase.ts
+import { createClient } from '@supabase/supabase-js'
+
+const supabaseUrl = import.meta.env.VITE_SUPABASE_URL
+const supabaseAnonKey = import.meta.env.VITE_SUPABASE_ANON_KEY
+
+export const supabase = createClient(supabaseUrl, supabaseAnonKey)
+```
+
+`.gitignore` に `.env.local` を追加済みか確認。
+
+---
+
+### 3. **エラーハンドリングの統一**
+**現状**: エラーが `console.error` と `alert` で散在  
+**問題点**: ユーザー体験が悪い、エラーログが取れない
+
+**対応方法**:
+```typescript
+// web/src/components/common/ErrorBoundary.tsx
+import React, { Component, ErrorInfo, ReactNode } from 'react';
+
+interface Props {
+  children: ReactNode;
+}
+
+interface State {
+  hasError: boolean;
+}
+
+class ErrorBoundary extends Component<Props, State> {
+  constructor(props: Props) {
+    super(props);
+    this.state = { hasError: false };
+  }
+
+  static getDerivedStateFromError(): State {
+    return { hasError: true };
+  }
+
+  componentDidCatch(error: Error, errorInfo: ErrorInfo) {
+    console.error('エラーが発生しました:', error, errorInfo);
+  }
+
+  render() {
+    if (this.state.hasError) {
+      return (
+        <div className="min-h-screen flex items-center justify-center bg-gray-50">
+          <div className="text-center">
+            <h1 className="text-2xl font-bold text-gray-900 mb-4">
+              エラーが発生しました
+            </h1>
+            <p className="text-gray-600 mb-4">
+              申し訳ございません。ページの読み込み中にエラーが発生しました。
+            </p>
+            <button
+              onClick={() => window.location.reload()}
+              className="bg-blue-600 text-white px-6 py-2 rounded-md"
+            >
+              ページを再読み込み
+            </button>
+          </div>
+        </div>
+      );
+    }
+
+    return this.props.children;
+  }
+}
+
+export default ErrorBoundary;
+```
+
+`App.tsx` で全体を囲む:
+```typescript
+<ErrorBoundary>
+  <Routes>...</Routes>
+</ErrorBoundary>
+```
+
+---
+
+### 4. **共通コンポーネントの作成**
+**現状**: フッターやローディングが各ページで重複  
+
+**対応方法**:
+```
+web/src/components/common/
+├── Footer.tsx           # 共通フッター
+├── Header.tsx           # 共通ヘッダー
+├── Loading.tsx          # ローディングスピナー
+├── Button.tsx           # 共通ボタン
+└── Modal.tsx            # 共通モーダル
+```
+
+---
+
+## 🟡 中期的に対応すべき
+
+### 5. **検索機能の改善**
+**追加すべき機能**:
+- [ ] 検索履歴の保存（LocalStorage）
+- [ ] よく検索される病院のランキング表示
+- [ ] 地図表示機能（Google Maps API または Leaflet.js）
+- [ ] 現在地から近い病院を検索
+- [ ] 診療科の絞り込み強化（複数選択可能に）
+- [ ] ページネーション（現在は全件表示）
+
+**実装例（検索履歴）**:
+```typescript
+// web/src/hooks/useSearchHistory.ts
+import { useState, useEffect } from 'react';
+
+interface SearchHistory {
+  query: string;
+  timestamp: number;
+}
+
+export const useSearchHistory = () => {
+  const [history, setHistory] = useState<SearchHistory[]>([]);
+
+  useEffect(() => {
+    const saved = localStorage.getItem('search_history');
+    if (saved) {
+      setHistory(JSON.parse(saved));
+    }
+  }, []);
+
+  const addHistory = (query: string) => {
+    const newHistory = [
+      { query, timestamp: Date.now() },
+      ...history.filter(h => h.query !== query)
+    ].slice(0, 10); // 最新10件まで
+    
+    setHistory(newHistory);
+    localStorage.setItem('search_history', JSON.stringify(newHistory));
+  };
+
+  const clearHistory = () => {
+    setHistory([]);
+    localStorage.removeItem('search_history');
+  };
+
+  return { history, addHistory, clearHistory };
+};
+```
+
+---
+
+### 6. **待ち時間データの可視化強化**
+**追加すべき機能**:
+- [ ] 曜日別の待ち時間比較グラフ
+- [ ] 月別の待ち時間推移グラフ
+- [ ] 診療科別の待ち時間比較
+- [ ] データの信頼度表示（サンプル数による）
+
+**実装例（Chart.js 使用）**:
+```bash
+npm install chart.js react-chartjs-2
+```
+
+```typescript
+// web/src/components/charts/WaitTimeChart.tsx
+import { Line } from 'react-chartjs-2';
+
+const WaitTimeChart = ({ data }) => {
+  const chartData = {
+    labels: data.map(d => `${d.hour}時`),
+    datasets: [{
+      label: '平均待ち時間',
+      data: data.map(d => d.avg_wait_minutes),
+      borderColor: 'rgb(75, 192, 192)',
+      tension: 0.1
+    }]
+  };
+
+  return <Line data={chartData} />;
+};
+```
+
+---
+
+### 7. **パフォーマンス最適化**
+**対応すべき項目**:
+- [ ] React.memo でコンポーネントのメモ化
+- [ ] useMemo / useCallback で再レンダリング防止
+- [ ] 画像の最適化（WebP 変換、遅延読み込み）
+- [ ] コード分割（React.lazy / Suspense）
+- [ ] Supabase クエリの最適化（インデックス追加）
+
+**実装例（コード分割）**:
+```typescript
+// web/src/App.tsx
+import { lazy, Suspense } from 'react';
+
+const SearchPage = lazy(() => import('./components/search-ui-example'));
+const About = lazy(() => import('./pages/About'));
+
+function App() {
+  return (
+    <Suspense fallback={<Loading />}>
+      <Routes>
+        <Route path="/search" element={<SearchPage />} />
+        <Route path="/about" element={<About />} />
+      </Routes>
+    </Suspense>
+  );
+}
+```
+
+---
+
+### 8. **テストの追加**
+**現状**: テストコードが存在しない  
+**問題点**: リファクタリング時の安全性が低い
+
+**対応方法**:
+```bash
+npm install --save-dev vitest @testing-library/react @testing-library/jest-dom
+```
+
+```typescript
+// web/src/components/__tests__/SearchSidebar.test.tsx
+import { render, screen } from '@testing-library/react';
+import { SearchSidebar } from '../SearchSidebar';
+
+describe('SearchSidebar', () => {
+  it('検索ボタンが表示される', () => {
+    render(<SearchSidebar {...mockProps} />);
+    expect(screen.getByText('検索')).toBeInTheDocument();
+  });
+});
+```
+
+---
+
+## 🟢 長期的に検討すべき
+
+### 9. **ユーザー認証機能**
+**追加機能**:
+- [ ] ユーザー登録・ログイン（Supabase Auth）
+- [ ] お気に入り病院の保存
+- [ ] 自分の投稿履歴の管理
+- [ ] プロフィール設定
+
+---
+
+### 10. **通知機能**
+**追加機能**:
+- [ ] 待ち時間が短くなったら通知
+- [ ] お気に入り病院の更新通知
+- [ ] PWA のプッシュ通知
+
+---
+
+### 11. **管理画面の構築**
+**必要な機能**:
+- [ ] データの統計情報表示
+- [ ] スパム投稿の削除
+- [ ] ユーザー管理
+- [ ] お知らせ機能
+
+---
+
+### 12. **データ品質の向上**
+**対応項目**:
+- [ ] 異常値の自動検出・除外
+- [ ] 投稿データの信頼度スコア
+- [ ] 重複データの統合
+- [ ] 定期的なデータクレンジング
+
+---
+
+## 📊 データベース改善
+
+### 13. **インデックスの追加**
+```sql
+-- 検索パフォーマンス向上
+CREATE INDEX idx_facility_name ON clinic(facility_name);
+CREATE INDEX idx_prefecture ON clinic(prefecture);
+CREATE INDEX idx_gov_id ON form_response(gov_id);
+```
+
+### 14. **RLS（Row Level Security）の設定**
+```sql
+-- 一般ユーザーは自分の投稿のみ削除可能
+CREATE POLICY "Users can delete own responses"
+  ON form_response
+  FOR DELETE
+  USING (auth.uid() = user_id);
+```
+
+---
+
+## 🛠️ 開発環境の改善
+
+### 15. **開発ツールの追加**
+```bash
+# コード整形
+npm install --save-dev prettier
+
+# コミット時の自動チェック
+npm install --save-dev husky lint-staged
+```
+
+```json
+// package.json
+{
+  "scripts": {
+    "format": "prettier --write \"src/**/*.{ts,tsx}\"",
+    "lint:fix": "eslint . --fix"
+  }
+}
+```
+
+---
+
+### 16. **GitHub Actions でCI/CD**
+```yaml
+# .github/workflows/test.yml
+name: Test
+on: [push, pull_request]
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v3
+      - uses: actions/setup-node@v3
+      - run: npm ci
+      - run: npm run lint
+      - run: npm run build
+```
+
+---
+
+## 📝 ドキュメント整備
+
+### 17. **README の充実**
+- [ ] プロジェクト概要
+- [ ] セットアップ手順
+- [ ] 環境変数の説明
+- [ ] デプロイ手順
+- [ ] コントリビューションガイド
+
+### 18. **コードコメントの追加**
+- [ ] 複雑なロジックに説明コメント
+- [ ] JSDoc でコンポーネントの説明
+- [ ] 型定義に説明を追加
+
+---
+
+## 🎯 優先順位の付け方
+
+### 明日から1週間で対応すべき:
+1. **環境変数の整理**（2時間）
+2. **ErrorBoundary 追加**（1時間）
+3. **共通フッター・ヘッダー作成**（2時間）
+
+### 1ヶ月以内に対応すべき:
+1. **search-ui-example.tsx のコンポーネント分割**（1週間）
+2. **検索履歴機能**（2日）
+3. **テスト追加**（1週間）
+
+### 3ヶ月以内に対応すべき:
+1. **地図表示機能**（2週間）
+2. **グラフ表示機能**（1週間）
+3. **ユーザー認証**（2週間）
+
+---
+
+## 📚 参考リソース
+
+- **React 公式ドキュメント**: https://ja.react.dev/
+- **Supabase ドキュメント**: https://supabase.com/docs
+- **Tailwind CSS**: https://tailwindcss.com/docs
+- **Vite ドキュメント**: https://ja.vite.dev/
+
+---
+
+明日から一人で進める場合は、**環境変数の整理**から始めることをお勧めします。セキュリティと保守性が向上し、他の改善作業の基盤になります。

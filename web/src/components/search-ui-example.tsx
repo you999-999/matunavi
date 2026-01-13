@@ -1,30 +1,126 @@
 /**
- * 病院・診療所検索UI - 画面案
- * React + TypeScript + Tailwind CSS を使用したモダンな検索インターフェース
+ * まつなび - 病院・診療所検索ページコンポーネント
+ * 
+ * このファイルは、まつなびのメイン機能である病院・診療所検索画面の
+ * すべての機能を含む統合コンポーネントです。
+ * 
+ * 【ファイル概要】
+ * - ファイル名: search-ui-example.tsx
+ * - 行数: 約1265行（巨大なコンポーネント）
+ * - 技術スタック: React + TypeScript + Tailwind CSS + Supabase
+ * 
+ * 【主要機能】
+ * 1. 検索機能
+ *    - 都道府県、市区町村、診療科、施設名、住所での検索
+ *    - 診療日・診療時間帯での絞り込み
+ *    - 施設種別（病院・診療所・全て）の選択
+ * 
+ * 2. 検索結果表示
+ *    - 施設一覧のカード表示
+ *    - 施設名、住所、施設種別の表示
+ * 
+ * 3. 施設詳細表示
+ *    - 施設をクリックすると詳細情報を表示
+ *    - 診療時間、診療科の表示
+ *    - 待ち時間情報の表示（ヒートマップ）
+ * 
+ * 4. 待ち時間投稿機能
+ *    - ユーザーが待ち時間を投稿できる
+ *    - 受付時間、診察開始時間、診療科を入力
+ *    - Supabase の form_response テーブルに保存
+ * 
+ * 5. 待ち時間ヒートマップ表示
+ *    - 時間帯別・曜日別の待ち時間を可視化
+ *    - 色分けで待ち時間の長さを表現
+ *    - データがない場合の適切な表示
+ * 
+ * 【コンポーネント構成】
+ * SearchPage（メインコンポーネント）
+ * ├─ 検索フォーム（サイドバー）
+ * ├─ 検索結果一覧
+ * ├─ 施設詳細モーダル
+ * │  ├─ 基本情報表示
+ * │  ├─ 待ち時間ヒートマップ
+ * │  └─ 待ち時間投稿フォーム
+ * └─ 成功メッセージモーダル
+ * 
+ * 【使用するSupabaseテーブル/ビュー】
+ * - facility_search_view: 病院・診療所の検索用ビュー（READ）
+ * - form_response: 待ち時間投稿データ（WRITE）
+ * - wait_time_public_avg_view: 平均待ち時間の公開ビュー（READ）
+ * - wait_time_public_hourly_avg_view: 時間帯別待ち時間の公開ビュー（READ）
+ * 
+ * 【状態管理（useState）】
+ * - 検索条件: searchType, prefecture, city, department, facilityName, address, dayOfWeek, timeRange
+ * - 検索結果: searchResults
+ * - 選択施設: selectedFacility
+ * - 待ち時間データ: waitTimeData, hourlyWaitTimeData
+ * - フォーム入力: receptionTime, treatmentStartTime, selectedDepartment
+ * - UI状態: showSuccessModal, isSubmitting
+ * 
+ * 【リファクタリングの必要性】
+ * ⚠️ このファイルは1265行と非常に大きく、以下のように分割すべき:
+ * - SearchSidebar.tsx（検索条件入力）
+ * - SearchResults.tsx（検索結果一覧）
+ * - FacilityDetail.tsx（施設詳細）
+ * - WaitTimeHeatmap.tsx（ヒートマップ）
+ * - WaitTimeForm.tsx（待ち時間投稿フォーム）
+ * - SuccessModal.tsx（成功メッセージ）
+ * 
+ * 【パフォーマンス最適化の余地】
+ * - コンポーネントのメモ化（React.memo）
+ * - useCallback / useMemo の活用
+ * - 検索結果のページネーション
+ * - 画像の遅延読み込み
+ * 
+ * 【セキュリティ】
+ * - ユーザー入力のサニタイズ（XSS対策）
+ * - SQLインジェクション対策（Supabase APIが自動対応）
+ * - 投稿データのバリデーション
+ * 
+ * @module SearchPage
  */
 
 import React, { useState, useRef, useEffect } from 'react';
 import { Link } from 'react-router-dom';
 import { supabase } from '../lib/supabase';
 
-// ============================================
-// 1. メイン検索画面
-// ============================================
-
-// 検索結果の型定義
-interface SearchResult {
-  facility_type: 'hospital' | 'clinic';
-  facility_name: string;
-  address: string;
-  prefecture: string;
-  gov_id?: string;
-}
+// ===================================
+// 型定義
+// ===================================
 
 /**
- * 都道府県コードを都道府県名に変換
- * JIS規格の都道府県コード（01-47）を都道府県名に変換
+ * 検索結果の型定義
+ * facility_search_view から取得するデータの型
+ */
+interface SearchResult {
+  facility_type: 'hospital' | 'clinic';  // 施設種別（病院 or 診療所）
+  facility_name: string;                 // 施設名
+  address: string;                       // 所在地
+  prefecture: string;                    // 都道府県コード
+  gov_id?: string;                       // 政府ID（医療機関識別子）
+}
+
+// ===================================
+// ユーティリティ関数
+// ===================================
+
+/**
+ * 都道府県コードを都道府県名に変換する関数
+ * 
+ * JIS X 0401 規格の都道府県コード（2桁、01-47）を
+ * 都道府県名（漢字表記）に変換します。
+ * 
+ * @param {string} code - 都道府県コード（'01' - '47'）
+ * @returns {string} 都道府県名（例: '01' → '北海道'）
+ * 
+ * @example
+ * getPrefectureName('13') // => '東京都'
+ * getPrefectureName('27') // => '大阪府'
+ * getPrefectureName('99') // => '99' (未定義のコードはそのまま返す)
  */
 function getPrefectureName(code: string): string {
+  // 都道府県コードと都道府県名のマッピングテーブル
   const prefectureMap: Record<string, string> = {
     '01': '北海道',
     '02': '青森県',
@@ -75,32 +171,125 @@ function getPrefectureName(code: string): string {
     '47': '沖縄県',
   };
 
+  // マッピングにコードがない場合は、コードをそのまま返す
   return prefectureMap[code] || code;
 }
 
+// ===================================
+// メインコンポーネント: SearchPage
+// ===================================
+
+/**
+ * SearchPage コンポーネント
+ * 
+ * まつなびのメイン機能である病院・診療所検索画面。
+ * 検索条件入力、検索結果表示、施設詳細表示、待ち時間投稿などの
+ * 全ての機能を統合した大型コンポーネント。
+ * 
+ * @returns {JSX.Element} 検索ページのJSX
+ */
 const SearchPage: React.FC = () => {
-  // 検索条件のstate（初期値は空文字）
+  // ===================================
+  // 状態管理（useState）
+  // ===================================
+  
+  // --- 検索条件のstate ---
+  
+  /**
+   * 検索対象の施設種別
+   * 'hospital': 病院のみ
+   * 'clinic': 診療所のみ
+   * 'both': 両方（初期値）
+   */
   const [searchType, setSearchType] = useState<'hospital' | 'clinic' | 'both'>('both');
+  
+  /**
+   * 都道府県コード（2桁）
+   * 例: '13' = 東京都, '27' = 大阪府
+   */
   const [prefecture, setPrefecture] = useState<string>('');
+  
+  /**
+   * 市区町村コード（5桁）
+   * 例: '13101' = 東京都千代田区
+   */
   const [city, setCity] = useState<string>('');
+  
+  /**
+   * 診療科名
+   * 例: '内科', '外科', '整形外科'
+   */
   const [department, setDepartment] = useState<string>('');
-  const [facilityName, setFacilityName] = useState<string>(''); // 病院・診療所名
-  const [address, setAddress] = useState<string>(''); // 住所
+  
+  /**
+   * 施設名（部分一致検索）
+   * 例: '病院', '〇〇クリニック'
+   */
+  const [facilityName, setFacilityName] = useState<string>('');
+  
+  /**
+   * 住所（部分一致検索）
+   * 例: '東京都', '渋谷区'
+   */
+  const [address, setAddress] = useState<string>('');
+  
+  /**
+   * 診療日（曜日）
+   * 例: 'monday', 'tuesday', 'wednesday'
+   */
   const [dayOfWeek, setDayOfWeek] = useState<string>('');
+  
+  /**
+   * 診療時間帯（開始・終了）
+   * 例: { start: '09:00', end: '17:00' }
+   */
   const [timeRange, setTimeRange] = useState<{ start: string; end: string }>({ start: '', end: '' });
   
-  // 検索結果のstate
+  // --- 検索結果のstate ---
+  
+  /**
+   * 検索結果の配列
+   * facility_search_view から取得したデータを格納
+   */
   const [searchResults, setSearchResults] = useState<SearchResult[]>([]);
   
-  // 選択された施設のstate
+  // --- 選択された施設のstate ---
+  
+  /**
+   * 選択された施設の詳細情報
+   * null の場合は詳細モーダルを非表示
+   */
   const [selectedFacility, setSelectedFacility] = useState<SearchResult | null>(null);
 
+  // ===================================
+  // イベントハンドラ
+  // ===================================
+  
   /**
    * 検索ボタンをクリックしたときの処理
-   * Supabaseのfacility_search_viewを検索して結果を表示
+   * 
+   * 入力された検索条件に基づいて Supabase の facility_search_view を検索し、
+   * 結果を searchResults に格納します。
+   * 
+   * 【検索条件】
+   * - facilityName: 施設名（部分一致、ILIKE）
+   * - prefecture: 都道府県コード（完全一致、EQ）
+   * - address: 住所（部分一致、ILIKE）
+   * 
+   * 【処理フロー】
+   * 1. 検索条件オブジェクトを作成（空の条件は除外）
+   * 2. Supabaseクエリを構築（動的に条件を追加）
+   * 3. 検索を実行
+   * 4. エラーハンドリング
+   * 5. 結果を型に合わせて変換
+   * 6. searchResults にセット
+   * 
+   * @async
+   * @returns {Promise<void>}
    */
   const handleSearch = async () => {
     // 空文字の項目を除外した検索条件オブジェクトを作成
+    // スプレッド構文と条件演算子で動的にプロパティを追加
     const searchConditions = {
       ...(facilityName && { facilityName }),
       ...(prefecture && { prefecture }),
@@ -111,15 +300,23 @@ const SearchPage: React.FC = () => {
 
     try {
       // Supabaseクエリを構築
+      // facility_search_view は病院と診療所を統合したビュー
       let query = supabase.from('facility_search_view').select('*');
 
       // 検索条件を動的に追加（空の条件は含めない）
+      
+      // 施設名の部分一致検索（大文字小文字を区別しない）
+      // ILIKE は PostgreSQL の大文字小文字を区別しない LIKE
       if (facilityName) {
         query = query.ilike('facility_name', `%${facilityName}%`);
       }
+      
+      // 都道府県コードの完全一致検索
       if (prefecture) {
         query = query.eq('prefecture', prefecture);
       }
+      
+      // 住所の部分一致検索（大文字小文字を区別しない）
       if (address) {
         query = query.ilike('address', `%${address}%`);
       }
@@ -127,13 +324,15 @@ const SearchPage: React.FC = () => {
       // 検索実行
       const { data, error } = await query;
 
+      // エラーハンドリング
       if (error) {
         console.error('検索エラー:', error);
-        setSearchResults([]);
+        setSearchResults([]);  // エラー時は空配列をセット
         return;
       }
 
       // 検索結果を型に合わせて変換
+      // any 型のデータを SearchResult 型に変換
       const results: SearchResult[] = (data || []).map((item: any) => ({
         facility_type: item.facility_type as 'hospital' | 'clinic',
         facility_name: item.facility_name || '',
@@ -142,11 +341,12 @@ const SearchPage: React.FC = () => {
         gov_id: item.gov_id || '',
       }));
 
-      // 検索結果をセット
+      // 検索結果を state にセット
       setSearchResults(results);
     } catch (error) {
+      // try-catch による例外処理
       console.error('検索処理エラー:', error);
-      setSearchResults([]);
+      setSearchResults([]);  // エラー時は空配列をセット
     }
   };
 

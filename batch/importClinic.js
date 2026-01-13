@@ -1,35 +1,128 @@
 /**
- * importClinic.js
+ * まつなび - 診療所データインポートスクリプト（importClinic.js）
  * 
- * このファイルは、政府公開CSV（02-1_clinic_facility_info_20251201.csv）を読み込み、
- * Supabase の clinic テーブルに大量・安全・高速に登録するバッチ処理です。
+ * このバッチ処理は、厚生労働省が公開する診療所施設情報CSV
+ * （02-1_clinic_facility_info_YYYYMMDD.csv）を読み込み、
+ * Supabase の clinic テーブルに安全かつ高速に登録します。
  * 
- * 処理内容:
+ * 【目的】
+ * - 政府公開データからまつなびのデータベースを構築
+ * - 全国の診療所情報を Supabase に格納
+ * - 再実行可能な安全なインポート処理
+ * 
+ * 【処理フロー】
  * 1. 既存の clinic テーブルを全件ロードして Map<gov_id, id> を作成（重複チェック用）
  * 2. CSVをストリームで読み込み、既存のgov_idを除外
  * 3. 新規データのみをバッチ処理（500-1000件ずつ）でINSERT
  * 4. 既存のgov_idはSKIP（更新しない）
  * 
- * 特徴:
- * - 再実行可能（既存データは更新しない）
- * - ストリーム読み込み（全件メモリ保持しない）
- * - バッチ処理で高速
- * - 安全（DELETE/TRUNCATEは行わない）
+ * 【特徴】
+ * - 再実行可能: 既存データは更新せず、新規データのみ追加
+ * - ストリーム読み込み: 全件メモリ保持しない（省メモリ）
+ * - バッチ処理: 1000件ずつまとめてINSERT（高速）
+ * - 安全: DELETE/TRUNCATEは行わない（既存データ保護）
+ * - 重複チェック: gov_id でチェック（政府ID）
+ * 
+ * 【対象テーブル】
+ * clinic テーブル
+ * - id: UUID（主キー、自動生成）
+ * - gov_id: VARCHAR（政府ID、ユニーク制約）
+ * - name: VARCHAR（施設名）
+ * - address: VARCHAR（所在地）
+ * - prefecture: VARCHAR（都道府県コード）
+ * - city: VARCHAR（市区町村コード）
+ * 
+ * 【CSVフォーマット】
+ * - ID: 政府が付与する医療機関ID（gov_id に対応）
+ * - 正式名称: 診療所の正式名称（name に対応）
+ * - 所在地: 診療所の所在地（address に対応）
+ * - 都道府県コード: 2桁の都道府県コード（prefecture に対応）
+ * - 市区町村コード: 5桁の市区町村コード（city に対応）
+ * 
+ * 【実行方法】
+ * ```bash
+ * cd batch
+ * node importClinic.js
+ * ```
+ * 
+ * 【前提条件】
+ * - CSVファイルが batch/ ディレクトリに配置されていること
+ * - Supabase の接続情報（URL、KEY）が正しいこと
+ * - clinic テーブルが作成済みであること
+ * 
+ * 【依存パッケージ】
+ * - fs: Node.js標準モジュール（ファイル読み込み）
+ * - csv-parser: CSVパース用ライブラリ
+ * - @supabase/supabase-js: Supabase クライアント
+ * 
+ * 【実行時間の目安】
+ * - 診療所数: 約10万件
+ * - 処理時間: 5-10分程度（ネットワーク速度に依存）
+ * 
+ * 【エラーハンドリング】
+ * - CSV読み込みエラー: 処理を中断、エラーログ出力
+ * - Supabase接続エラー: 処理を中断、エラーログ出力
+ * - バッチINSERTエラー: 該当バッチのみ失敗、エラーログ出力
+ * 
+ * 【注意事項】
+ * - SERVICE_ROLE_KEY を使用（行レベルセキュリティをバイパス）
+ * - 本番環境では適切なアクセス制御が必要
+ * - CSV更新時はファイル名（CSV_PATH）を変更すること
+ * 
+ * @module importClinic
  */
 
-const fs = require('fs');
-const csv = require('csv-parser');
-const { createClient } = require('@supabase/supabase-js');
+// ===================================
+// 必要なモジュールのインポート
+// ===================================
 
+const fs = require('fs');                    // ファイルシステム操作
+const csv = require('csv-parser');           // CSVパーサー
+const { createClient } = require('@supabase/supabase-js');  // Supabaseクライアント
+
+// ===================================
 // Supabase接続情報
+// ===================================
+
+/**
+ * Supabase プロジェクトURL
+ * まつなびのSupabaseプロジェクトのURL
+ */
 const SUPABASE_URL = 'https://sauhmasxargkwltsuujm.supabase.co';
+
+/**
+ * Supabase サービスロールキー
+ * ⚠️ 警告: このキーは強力な権限を持つため、クライアント側に公開しない
+ * Row Level Security (RLS) をバイパスして全テーブルにアクセス可能
+ */
 const SUPABASE_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InNhdWhtYXN4YXJna3dsdHN1dWptIiwicm9sZSI6InNlcnZpY2Vfcm9sZSIsImlhdCI6MTc2NTQ1ODE1NywiZXhwIjoyMDgxMDM0MTU3fQ.NzLh4WYdqpPTrigqarEL7ImFzSlEEYTynIp79Re9QQc';
 
+/**
+ * Supabaseクライアントインスタンス
+ * データベース操作に使用
+ */
 const supabase = createClient(SUPABASE_URL, SUPABASE_KEY);
 
-// 設定
+// ===================================
+// 設定値
+// ===================================
+
+/**
+ * CSVファイルのパス
+ * 政府公開データのファイル名（日付部分は適宜変更）
+ */
 const CSV_PATH = './02-1_clinic_facility_info_20251201.csv';
-const BATCH_SIZE = 1000; // バッチサイズ（500-1000件）
+
+/**
+ * バッチサイズ
+ * 一度にINSERTする件数（500-1000件が推奨）
+ * 大きすぎるとタイムアウト、小さすぎると遅い
+ */
+const BATCH_SIZE = 1000;
+
+// ===================================
+// ユーティリティ関数
+// ===================================
 
 /**
  * 文字列の正規化（BOM、ダブルクォート、空白を除去）
