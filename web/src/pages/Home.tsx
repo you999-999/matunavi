@@ -49,9 +49,12 @@ const Home: React.FC = () => {
           {/* タイトルエリア - 薄い背景色で視認性向上 */}
           <div className="bg-gray-50 rounded-lg px-6 py-8 mb-6">
             {/* サービス名とキャラクター画像 */}
-            <div className="flex items-baseline justify-center gap-2 mb-4">
-              {/* サービス名「まつなび」 */}
-              <h1 className="text-6xl font-bold text-gray-900">
+            <div className="flex flex-col items-center justify-center gap-1 mb-4 md:flex-row md:items-baseline md:gap-2">
+              {/* サービス名「まつなび」
+                  - スマホではフォントサイズを少し下げて1行で収まるようにする
+                  - 文字の改行を防ぐために whitespace-nowrap を付与
+                  - PC(md以上)では従来どおり text-6xl を維持 */}
+              <h1 className="text-4xl md:text-6xl font-bold text-gray-900 whitespace-nowrap">
                 まつなび
               </h1>
               
@@ -61,7 +64,7 @@ const Home: React.FC = () => {
               <img 
                 src="/images/matuneko.png" 
                 alt="まつねこ" 
-                className="h-16 w-auto object-contain"
+                className="h-14 md:h-16 w-auto object-contain"
                 style={{ 
                   backgroundColor: 'transparent',  // 透過背景を維持
                   display: 'block',

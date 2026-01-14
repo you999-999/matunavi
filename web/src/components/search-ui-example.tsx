@@ -357,14 +357,18 @@ const SearchPage: React.FC = () => {
         <div className="max-w-4xl mx-auto px-4 sm:px-6 lg:px-8 py-12 text-center">
           {/* タイトル部分に背景色を付ける */}
           <div className="bg-gray-50 rounded-lg px-6 py-8 mb-6">
-            <div className="flex items-baseline justify-center gap-2 mb-4">
-              <h1 className="text-6xl font-bold text-gray-900">
+            <div className="flex flex-col items-center justify-center gap-1 mb-4 md:flex-row md:items-baseline md:gap-2">
+              {/* タイトル「まつなび」
+                  - スマホでは text-4xl にして1行に収まるようにする
+                  - 改行を防ぐため whitespace-nowrap を付与
+                  - PC(md以上)では従来どおり text-6xl を維持 */}
+              <h1 className="text-4xl md:text-6xl font-bold text-gray-900 whitespace-nowrap">
                 まつなび
               </h1>
               <img 
                 src="/images/matuneko.png" 
                 alt="まつねこ" 
-                className="h-16 w-auto object-contain"
+                className="h-14 md:h-16 w-auto object-contain"
                 style={{ 
                   backgroundColor: 'transparent',
                   display: 'block',
