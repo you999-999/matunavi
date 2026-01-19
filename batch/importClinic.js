@@ -146,6 +146,9 @@ function normalizeHeader(header) {
 /**
  * 既存の clinic テーブルを全件ロードして Map<gov_id, id> を作成
  * 重複チェック用に使用する
+ * 
+ * 【注意】upsert()を使用するようになったため、この関数は使用されていません。
+ * 将来的に削除予定です。
  */
 async function loadExistingClinicMap() {
   console.log('▶ 既存の clinic テーブルを読み込み中...');
@@ -196,15 +199,20 @@ async function loadExistingClinicMap() {
 
 /**
  * バッチ挿入処理
- * 新規データのみをINSERT（既存チェック済み）
+ * upsert()を使用して、既存データは更新、新規データは挿入
  */
 async function insertBatch(clinics) {
   if (clinics.length === 0) return { success: true, count: 0 };
 
   try {
+    // gov_id を onConflict として明示的に指定
+    // 既存の gov_id がある場合は更新、ない場合は挿入
     const { data, error } = await supabase
       .from('clinic')
-      .insert(clinics)
+      .upsert(clinics, { 
+        onConflict: 'gov_id',
+        ignoreDuplicates: false  // 重複時は更新する
+      })
       .select();
 
     if (error) {
@@ -227,14 +235,10 @@ async function importClinics() {
     console.log('========================================');
     console.log(`CSVファイル: ${CSV_PATH}`);
 
-    // 1. 既存の clinic テーブルを全件ロードして Map を作成（重複チェック用）
-    const existingClinicMap = await loadExistingClinicMap();
-
-    // 2. CSVをストリームで読み込み、新規データのみを収集
-    const newClinics = [];
+    // CSVをストリームで読み込み、全データを収集
+    const clinics = [];
     let rowCount = 0;
     let skippedCount = 0;
-    let skippedExistingCount = 0;
 
     await new Promise((resolve, reject) => {
       fs.createReadStream(CSV_PATH)
@@ -248,13 +252,6 @@ async function importClinics() {
           const govId = normalizeString(row['ID']);
           if (!govId || govId === '') {
             skippedCount++;
-            return;
-          }
-
-          // 既存のgov_idかチェック（Mapで高速検索）
-          if (existingClinicMap.has(govId)) {
-            // 既存のgov_idはSKIP（更新しない）
-            skippedExistingCount++;
             return;
           }
 
@@ -272,22 +269,27 @@ async function importClinics() {
             return;
           }
 
-          // 新規データとして追加
+          // 合計病床数を取得（統計的待ち時間算出に使用）
+          // 診療所には通常病床数がないが、データがあれば取得
+          const totalBedCount = normalizeString(row['合計病床数']);
+          const bedCount = totalBedCount && !isNaN(parseInt(totalBedCount)) 
+            ? parseInt(totalBedCount) 
+            : null;
+
+          // データを追加（upsert()で既存データは更新、新規データは挿入）
           const clinic = {
             gov_id: govId,
             name: name,
             address: address,
             prefecture: normalizeString(row['都道府県コード']) || null,
             city: normalizeString(row['市区町村コード']) || null,
+            bed_count: bedCount,
           };
 
-          newClinics.push(clinic);
+          clinics.push(clinic);
         })
         .on('end', () => {
-          console.log(`✔ CSV読み込み完了: ${rowCount} 行`);
-          console.log(`  - 新規登録対象: ${newClinics.length} 件`);
-          console.log(`  - スキップ件数（gov_id が空、または name/address が空）: ${skippedCount} 件`);
-          console.log(`  - スキップ件数（既存のgov_id）: ${skippedExistingCount} 件`);
+          console.log(`✔ CSV読み込み完了: ${rowCount} 行（有効: ${clinics.length} 件、スキップ: ${skippedCount} 件）`);
           resolve();
         })
         .on('error', (error) => {
@@ -296,34 +298,34 @@ async function importClinics() {
         });
     });
 
-    // 3. 新規データがなければ終了
-    if (newClinics.length === 0) {
-      console.log('⚠ 新規登録対象がありません。');
+    // データがなければ終了
+    if (clinics.length === 0) {
+      console.log('⚠ 登録対象がありません。');
       console.log('========================================');
-      console.log('🎉 処理完了（新規データなし）');
+      console.log('🎉 処理完了（登録対象なし）');
       console.log('========================================');
       return;
     }
 
-    // 4. バッチ処理でINSERT
-    console.log('▶ バッチ処理でINSERT開始...');
+    // バッチ処理でUPSERT（既存データは更新、新規データは挿入）
+    console.log('▶ バッチ処理でUPSERT開始...');
     
     const batches = [];
-    for (let i = 0; i < newClinics.length; i += BATCH_SIZE) {
-      batches.push(newClinics.slice(i, i + BATCH_SIZE));
+    for (let i = 0; i < clinics.length; i += BATCH_SIZE) {
+      batches.push(clinics.slice(i, i + BATCH_SIZE));
     }
 
     console.log(`バッチ数: ${batches.length} バッチ（各最大 ${BATCH_SIZE} 件）`);
 
-    let insertedCount = 0;
+    let processedCount = 0;
 
     for (let i = 0; i < batches.length; i++) {
       const batch = batches[i];
       const result = await insertBatch(batch);
 
       if (result.success) {
-        insertedCount += result.count;
-        console.log(`✔ バッチ ${i + 1}/${batches.length}: ${result.count} 件登録（累計: ${insertedCount} 件）`);
+        processedCount += result.count;
+        console.log(`✔ バッチ ${i + 1}/${batches.length}: ${result.count} 件処理（累計: ${processedCount} 件）`);
       } else {
         const errorMsg = result.error?.message || JSON.stringify(result.error);
         console.error(`[FATAL] バッチ ${i + 1}/${batches.length} でエラー: ${errorMsg}`);
@@ -335,8 +337,7 @@ async function importClinics() {
     console.log('🎉 処理完了');
     console.log('========================================');
     console.log(`CSV行数: ${rowCount} 行`);
-    console.log(`新規 INSERT 件数: ${insertedCount} 件`);
-    console.log(`SKIP 件数（既存）: ${skippedExistingCount} 件`);
+    console.log(`処理件数（UPSERT）: ${processedCount} 件`);
     console.log(`SKIP 件数（gov_id が空、または name/address が空）: ${skippedCount} 件`);
     console.log('========================================');
 

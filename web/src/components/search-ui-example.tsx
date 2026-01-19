@@ -84,6 +84,12 @@
 import React, { useState, useRef, useEffect } from 'react';
 import { Link } from 'react-router-dom';
 import { supabase } from '../lib/supabase';
+import { 
+  calculateEstimatedWaitTime, 
+  formatEstimatedWaitTime,
+  shouldUseRealData,
+  type HospitalInfo 
+} from '../lib/estimatedWaitTime';
 
 // ===================================
 // 型定義
@@ -98,6 +104,8 @@ interface SearchResult {
   facility_name: string;                 // 施設名
   address: string;                       // 所在地
   prefecture: string;                    // 都道府県コード
+  city?: string;                         // 市区町村コード（統計的待ち時間算出に使用）
+  bed_count?: number;                    // 病床数（統計的待ち時間算出に使用）
   gov_id?: string;                       // 政府ID（医療機関識別子）
 }
 
@@ -338,6 +346,8 @@ const SearchPage: React.FC = () => {
         facility_name: item.facility_name || '',
         address: item.address || '',
         prefecture: item.prefecture || '',
+        city: item.city || undefined,
+        bed_count: item.bed_count ? parseInt(item.bed_count) : undefined,
         gov_id: item.gov_id || '',
       }));
 
@@ -1151,10 +1161,29 @@ const FacilityDetail: React.FC<FacilityDetailProps> = ({ facility, onClose }) =>
           <span className="text-xl text-gray-900">
             {isLoadingWaitTime ? (
               '読み込み中...'
-            ) : averageWaitTime && averageWaitTime.sample_count > 0 ? (
+            ) : averageWaitTime && shouldUseRealData(averageWaitTime.sample_count) ? (
+              // 実データが十分にある場合（5件以上）
               `${averageWaitTime.avg_wait_minutes}分（サンプル数: ${averageWaitTime.sample_count}件）`
             ) : (
-              'データなし'
+              // 実データがない、または少ない場合（5件未満）→ 統計的待ち時間を表示
+              (() => {
+                const hospitalInfo: HospitalInfo = {
+                  prefecture: facility.prefecture,
+                  city: facility.city,
+                  bedCount: facility.bed_count,
+                  department: undefined, // 診療科は施設詳細で選択されていないため undefined
+                };
+                const estimated = calculateEstimatedWaitTime(hospitalInfo);
+                return (
+                  <span className="text-blue-600">
+                    {formatEstimatedWaitTime(estimated)}
+                    <br />
+                    <span className="text-sm text-gray-500 italic">
+                      ※ 統計的な傾向に基づく目安です。実際の状況とは異なる場合があります。
+                    </span>
+                  </span>
+                );
+              })()
             )}
           </span>
         </div>

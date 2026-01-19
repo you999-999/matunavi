@@ -45,15 +45,20 @@ function normalizeHeader(header) {
 
 /**
  * バッチ挿入処理
+ * upsert()を使用して、既存データは更新、新規データは挿入
  */
 async function insertBatch(hospitals) {
   if (hospitals.length === 0) return { success: true, count: 0 };
 
   try {
-    // gov_id はユニーク制約があるため、upsert()が自動的に検出する
+    // gov_id を onConflict として明示的に指定
+    // 既存の gov_id がある場合は更新、ない場合は挿入
     const { data, error } = await supabase
       .from('hospital')
-      .upsert(hospitals)
+      .upsert(hospitals, { 
+        onConflict: 'gov_id',
+        ignoreDuplicates: false  // 重複時は更新する
+      })
       .select();
 
     if (error) {
@@ -111,12 +116,19 @@ async function importHospitals() {
           return;
         }
 
+        // 合計病床数を取得（統計的待ち時間算出に使用）
+        const totalBedCount = normalizeString(row['合計病床数']);
+        const bedCount = totalBedCount && !isNaN(parseInt(totalBedCount)) 
+          ? parseInt(totalBedCount) 
+          : null;
+
         const hospital = {
           gov_id: govId,
           name: name,
           address: address,
           prefecture: normalizeString(row['都道府県コード']) || null,
           city: normalizeString(row['市区町村コード']) || null,
+          bed_count: bedCount,
         };
 
         rows.push(hospital);
