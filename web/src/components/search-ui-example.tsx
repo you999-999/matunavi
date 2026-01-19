@@ -90,6 +90,7 @@ import {
   shouldUseRealData,
   type HospitalInfo 
 } from '../lib/estimatedWaitTime';
+import WaitTimeChart from './WaitTimeChart';
 
 // ===================================
 // 型定義
@@ -832,6 +833,7 @@ interface FormResponseData {
   accounting_end_time: string | null;
   has_reservation: string | null;
   reservation_time: string | null;
+  visit_type: 'first' | 'repeat' | null; // 初診/再診
   other: string | null;
   created_at: string;
 }
@@ -849,6 +851,27 @@ interface HourlyWaitTime {
   sample_count: number;
 }
 
+// 曜日別待ち時間の型定義
+interface DayOfWeekWaitTime {
+  dayOfWeek: 'weekday' | 'saturday' | 'holiday';
+  avg_wait_minutes: number;
+  sample_count: number;
+}
+
+// 時間帯別待ち時間の型定義（午前/午後/夕方）
+interface TimeSlotWaitTime {
+  timeSlot: 'morning' | 'afternoon' | 'evening';
+  avg_wait_minutes: number;
+  sample_count: number;
+}
+
+// 診療科別待ち時間の型定義
+interface DepartmentWaitTime {
+  department: string;
+  avg_wait_minutes: number;
+  sample_count: number;
+}
+
 const FacilityDetail: React.FC<FacilityDetailProps> = ({ facility, onClose }) => {
   const detailRef = useRef<HTMLDivElement>(null);
   
@@ -859,6 +882,7 @@ const FacilityDetail: React.FC<FacilityDetailProps> = ({ facility, onClose }) =>
   const [accountingEndTime, setAccountingEndTime] = useState<string>('');
   const [hasReservation, setHasReservation] = useState<string>('');
   const [reservationTime, setReservationTime] = useState<string>('');
+  const [visitType, setVisitType] = useState<'first' | 'repeat' | ''>(''); // 初診/再診
   const [other, setOther] = useState<string>('');
 
   // 平均待ち時間のstate
@@ -868,6 +892,18 @@ const FacilityDetail: React.FC<FacilityDetailProps> = ({ facility, onClose }) =>
   // 時間帯別待ち時間のstate（ヒートマップ用）
   const [hourlyWaitTimes, setHourlyWaitTimes] = useState<HourlyWaitTime[]>([]);
   const [isLoadingHourly, setIsLoadingHourly] = useState<boolean>(false);
+
+  // 曜日別待ち時間のstate
+  const [dayOfWeekWaitTimes, setDayOfWeekWaitTimes] = useState<DayOfWeekWaitTime[]>([]);
+  const [isLoadingDayOfWeek, setIsLoadingDayOfWeek] = useState<boolean>(false);
+
+  // 時間帯別待ち時間のstate（午前/午後/夕方）
+  const [timeSlotWaitTimes, setTimeSlotWaitTimes] = useState<TimeSlotWaitTime[]>([]);
+  const [isLoadingTimeSlot, setIsLoadingTimeSlot] = useState<boolean>(false);
+
+  // 診療科別待ち時間のstate
+  const [departmentWaitTimes, setDepartmentWaitTimes] = useState<DepartmentWaitTime[]>([]);
+  const [isLoadingDepartment, setIsLoadingDepartment] = useState<boolean>(false);
 
   // 送信中の状態管理
   const [isSubmitting, setIsSubmitting] = useState<boolean>(false);
@@ -891,6 +927,7 @@ const FacilityDetail: React.FC<FacilityDetailProps> = ({ facility, onClose }) =>
   useEffect(() => {
     loadRegisteredData();
     loadWaitTimeData();
+    loadCategorizedWaitTimeData();
   }, [facility]);
 
   /**
@@ -996,6 +1033,138 @@ const FacilityDetail: React.FC<FacilityDetailProps> = ({ facility, onClose }) =>
   };
 
   /**
+   * カテゴリ別待ち時間データを取得（曜日別・時間帯別・診療科別）
+   */
+  const loadCategorizedWaitTimeData = async () => {
+    if (!facility.gov_id) return;
+
+    setIsLoadingDayOfWeek(true);
+    setIsLoadingTimeSlot(true);
+    setIsLoadingDepartment(true);
+
+    try {
+      // form_responseテーブルからデータを取得
+      const { data, error } = await supabase
+        .from('form_response')
+        .select('reception_time, treatment_start_time, department')
+        .eq('gov_id', facility.gov_id)
+        .not('reception_time', 'is', null)
+        .not('treatment_start_time', 'is', null);
+
+      if (error) {
+        console.error('❌ カテゴリ別データ取得エラー:', error);
+        setDayOfWeekWaitTimes([]);
+        setTimeSlotWaitTimes([]);
+        setDepartmentWaitTimes([]);
+        return;
+      }
+
+      if (!data || data.length === 0) {
+        setDayOfWeekWaitTimes([]);
+        setTimeSlotWaitTimes([]);
+        setDepartmentWaitTimes([]);
+        return;
+      }
+
+      // 待ち時間を計算
+      const waitTimeData = data
+        .map((item: any) => {
+          if (!item.reception_time || !item.treatment_start_time) return null;
+          
+          const reception = new Date(`2000-01-01T${item.reception_time}`);
+          const treatment = new Date(`2000-01-01T${item.treatment_start_time}`);
+          const waitMinutes = (treatment.getTime() - reception.getTime()) / (1000 * 60);
+          
+          if (waitMinutes < 0 || waitMinutes > 480) return null; // 0〜480分以内のみ有効
+
+          // 曜日を判定（reception_timeからは取得できないため、created_atを使用）
+          // 注意: 実際の実装では、reception_timeの日付情報が必要
+          // 今回は簡易的に、データが少ない場合は統計的待ち時間を使用
+          
+          // 時間帯を判定
+          const hour = reception.getHours();
+          let timeSlot: 'morning' | 'afternoon' | 'evening';
+          if (hour >= 9 && hour < 12) {
+            timeSlot = 'morning';
+          } else if (hour >= 12 && hour < 17) {
+            timeSlot = 'afternoon';
+          } else {
+            timeSlot = 'evening';
+          }
+
+          return {
+            waitMinutes,
+            timeSlot,
+            department: item.department || null,
+          };
+        })
+        .filter((item: any) => item !== null);
+
+      // 時間帯別に集計
+      const timeSlotMap = new Map<'morning' | 'afternoon' | 'evening', { total: number; count: number }>();
+      waitTimeData.forEach((item: any) => {
+        const existing = timeSlotMap.get(item.timeSlot) || { total: 0, count: 0 };
+        timeSlotMap.set(item.timeSlot, {
+          total: existing.total + item.waitMinutes,
+          count: existing.count + 1,
+        });
+      });
+
+      const timeSlotResults: TimeSlotWaitTime[] = [
+        { timeSlot: 'morning', avg_wait_minutes: 0, sample_count: 0 },
+        { timeSlot: 'afternoon', avg_wait_minutes: 0, sample_count: 0 },
+        { timeSlot: 'evening', avg_wait_minutes: 0, sample_count: 0 },
+      ];
+
+      timeSlotMap.forEach((value, key) => {
+        const index = timeSlotResults.findIndex(r => r.timeSlot === key);
+        if (index >= 0) {
+          timeSlotResults[index] = {
+            timeSlot: key,
+            avg_wait_minutes: Math.round(value.total / value.count),
+            sample_count: value.count,
+          };
+        }
+      });
+
+      setTimeSlotWaitTimes(timeSlotResults);
+
+      // 診療科別に集計
+      const departmentMap = new Map<string, { total: number; count: number }>();
+      waitTimeData.forEach((item: any) => {
+        if (!item.department) return;
+        const existing = departmentMap.get(item.department) || { total: 0, count: 0 };
+        departmentMap.set(item.department, {
+          total: existing.total + item.waitMinutes,
+          count: existing.count + 1,
+        });
+      });
+
+      const departmentResults: DepartmentWaitTime[] = Array.from(departmentMap.entries()).map(([department, value]) => ({
+        department,
+        avg_wait_minutes: Math.round(value.total / value.count),
+        sample_count: value.count,
+      }));
+
+      setDepartmentWaitTimes(departmentResults);
+
+      // 曜日別は実データからは取得できないため、空配列を設定
+      // 統計的待ち時間を使用
+      setDayOfWeekWaitTimes([]);
+
+    } catch (error) {
+      console.error('❌ 予期しないエラー:', error);
+      setDayOfWeekWaitTimes([]);
+      setTimeSlotWaitTimes([]);
+      setDepartmentWaitTimes([]);
+    } finally {
+      setIsLoadingDayOfWeek(false);
+      setIsLoadingTimeSlot(false);
+      setIsLoadingDepartment(false);
+    }
+  };
+
+  /**
    * 登録データを削除
    */
   const handleDelete = async (id: string) => {
@@ -1062,6 +1231,7 @@ const FacilityDetail: React.FC<FacilityDetailProps> = ({ facility, onClose }) =>
           accounting_end_time: accountingEndTime || null,
           has_reservation: hasReservation || null,
           reservation_time: reservationTime || null,
+          visit_type: visitType || null, // 初診/再診
           other: other || null,
         })
         .select();
@@ -1079,6 +1249,7 @@ const FacilityDetail: React.FC<FacilityDetailProps> = ({ facility, onClose }) =>
         setAccountingEndTime('');
         setHasReservation('');
         setReservationTime('');
+        setVisitType('');
         setOther('');
         
         // 登録データを再取得
@@ -1187,6 +1358,178 @@ const FacilityDetail: React.FC<FacilityDetailProps> = ({ facility, onClose }) =>
             )}
           </span>
         </div>
+      </div>
+
+      {/* カテゴリ別待ち時間（曜日・時間帯・診療科） */}
+      <div className="mb-12">
+        <h3 className="text-2xl font-bold text-gray-900 mb-6">カテゴリ別待ち時間</h3>
+        
+        <div className="bg-gray-50 rounded-lg p-6 space-y-6">
+          {/* 曜日別 */}
+          <div>
+            <h4 className="text-lg font-semibold text-gray-900 mb-3">曜日別</h4>
+            {isLoadingDayOfWeek ? (
+              <div className="text-sm text-gray-500">読み込み中...</div>
+            ) : (
+              <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                {(['weekday', 'saturday', 'holiday'] as const).map((dayType) => {
+                  const realData = dayOfWeekWaitTimes.find(d => d.dayOfWeek === dayType);
+                  const dayName = dayType === 'weekday' ? '平日' : dayType === 'saturday' ? '土曜' : '日祝';
+                  
+                  if (realData && realData.sample_count >= 5) {
+                    // 実データがある場合
+                    return (
+                      <div key={dayType} className="bg-white rounded p-4 border border-gray-200">
+                        <div className="font-medium text-gray-900">{dayName}</div>
+                        <div className="text-lg font-bold text-blue-600 mt-1">
+                          {realData.avg_wait_minutes}分
+                        </div>
+                        <div className="text-xs text-gray-500 mt-1">
+                          （サンプル数: {realData.sample_count}件）
+                        </div>
+                      </div>
+                    );
+                  } else {
+                    // 実データがない場合 → 統計的待ち時間
+                    const hospitalInfo: HospitalInfo = {
+                      prefecture: facility.prefecture,
+                      city: facility.city,
+                      bedCount: facility.bed_count,
+                      department: undefined,
+                    };
+                    const estimated = calculateEstimatedWaitTime(hospitalInfo, dayType);
+                    return (
+                      <div key={dayType} className="bg-white rounded p-4 border border-gray-200">
+                        <div className="font-medium text-gray-900">{dayName}</div>
+                        <div className="text-lg font-bold text-blue-600 mt-1">
+                          {formatEstimatedWaitTime(estimated)}
+                        </div>
+                        <div className="text-xs text-gray-500 italic mt-1">
+                          ※ 統計的な傾向に基づく目安
+                        </div>
+                      </div>
+                    );
+                  }
+                })}
+              </div>
+            )}
+          </div>
+
+          {/* 時間帯別（午前/午後/夕方） */}
+          <div>
+            <h4 className="text-lg font-semibold text-gray-900 mb-3">時間帯別</h4>
+            {isLoadingTimeSlot ? (
+              <div className="text-sm text-gray-500">読み込み中...</div>
+            ) : (
+              <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                {(['morning', 'afternoon', 'evening'] as const).map((timeSlot) => {
+                  const realData = timeSlotWaitTimes.find(t => t.timeSlot === timeSlot);
+                  const timeSlotName = timeSlot === 'morning' ? '午前（9時〜12時）' : timeSlot === 'afternoon' ? '午後（12時〜17時）' : '夕方（17時〜19時）';
+                  
+                  if (realData && realData.sample_count >= 5) {
+                    // 実データがある場合
+                    return (
+                      <div key={timeSlot} className="bg-white rounded p-4 border border-gray-200">
+                        <div className="font-medium text-gray-900">{timeSlotName}</div>
+                        <div className="text-lg font-bold text-blue-600 mt-1">
+                          {realData.avg_wait_minutes}分
+                        </div>
+                        <div className="text-xs text-gray-500 mt-1">
+                          （サンプル数: {realData.sample_count}件）
+                        </div>
+                      </div>
+                    );
+                  } else {
+                    // 実データがない場合 → 統計的待ち時間
+                    const hospitalInfo: HospitalInfo = {
+                      prefecture: facility.prefecture,
+                      city: facility.city,
+                      bedCount: facility.bed_count,
+                      department: undefined,
+                    };
+                    const estimated = calculateEstimatedWaitTime(hospitalInfo, undefined, timeSlot);
+                    return (
+                      <div key={timeSlot} className="bg-white rounded p-4 border border-gray-200">
+                        <div className="font-medium text-gray-900">{timeSlotName}</div>
+                        <div className="text-lg font-bold text-blue-600 mt-1">
+                          {formatEstimatedWaitTime(estimated)}
+                        </div>
+                        <div className="text-xs text-gray-500 italic mt-1">
+                          ※ 統計的な傾向に基づく目安
+                        </div>
+                      </div>
+                    );
+                  }
+                })}
+              </div>
+            )}
+          </div>
+
+          {/* 診療科別 */}
+          <div>
+            <h4 className="text-lg font-semibold text-gray-900 mb-3">診療科別</h4>
+            {isLoadingDepartment ? (
+              <div className="text-sm text-gray-500">読み込み中...</div>
+            ) : departmentWaitTimes.length === 0 ? (
+              <div className="bg-white rounded p-4 border border-gray-200">
+                <div className="text-sm text-gray-500">診療科別のデータがありません</div>
+                <div className="text-xs text-gray-400 mt-2">
+                  ※ 診療科情報がない場合は、統計的待ち時間を表示します
+                </div>
+              </div>
+            ) : (
+              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+                {departmentWaitTimes.map((dept) => {
+                  if (dept.sample_count >= 5) {
+                    // 実データがある場合
+                    return (
+                      <div key={dept.department} className="bg-white rounded p-4 border border-gray-200">
+                        <div className="font-medium text-gray-900">{dept.department}</div>
+                        <div className="text-lg font-bold text-blue-600 mt-1">
+                          {dept.avg_wait_minutes}分
+                        </div>
+                        <div className="text-xs text-gray-500 mt-1">
+                          （サンプル数: {dept.sample_count}件）
+                        </div>
+                      </div>
+                    );
+                  } else {
+                    // 実データが少ない場合 → 統計的待ち時間
+                    const hospitalInfo: HospitalInfo = {
+                      prefecture: facility.prefecture,
+                      city: facility.city,
+                      bedCount: facility.bed_count,
+                      department: dept.department,
+                    };
+                    const estimated = calculateEstimatedWaitTime(hospitalInfo);
+                    return (
+                      <div key={dept.department} className="bg-white rounded p-4 border border-gray-200">
+                        <div className="font-medium text-gray-900">{dept.department}</div>
+                        <div className="text-lg font-bold text-blue-600 mt-1">
+                          {formatEstimatedWaitTime(estimated)}
+                        </div>
+                        <div className="text-xs text-gray-500 italic mt-1">
+                          ※ 統計的な傾向に基づく目安（サンプル数: {dept.sample_count}件）
+                        </div>
+                      </div>
+                    );
+                  }
+                })}
+              </div>
+            )}
+          </div>
+        </div>
+      </div>
+
+      {/* 待ち時間・予約待ち範囲グラフ（初診/再診別） */}
+      <div className="mb-12">
+        <h3 className="text-2xl font-bold text-gray-900 mb-6">待ち時間・予約待ち範囲グラフ</h3>
+        {facility.gov_id && (
+          <WaitTimeChart
+            facilityType={facility.facility_type}
+            govId={facility.gov_id}
+          />
+        )}
       </div>
 
       {/* 時間帯別待ち時間ヒートマップ */}
@@ -1460,6 +1803,38 @@ const FacilityDetail: React.FC<FacilityDetailProps> = ({ facility, onClose }) =>
               />
             </div>
           )}
+
+          {/* 今回の受診は？（初診/再診） */}
+          <div>
+            <label className="block text-xl font-medium text-gray-700 mb-4">
+              今回の受診は？
+            </label>
+            <div className="flex gap-6">
+              <label className="flex items-center cursor-pointer">
+                <input
+                  type="radio"
+                  name="visitType"
+                  value="first"
+                  checked={visitType === 'first'}
+                  onChange={(e) => setVisitType(e.target.value as 'first' | 'repeat')}
+                  className="mr-3 w-5 h-5"
+                />
+                <span className="text-lg text-gray-700">初診</span>
+              </label>
+              <label className="flex items-center cursor-pointer">
+                <input
+                  type="radio"
+                  name="visitType"
+                  value="repeat"
+                  checked={visitType === 'repeat'}
+                  onChange={(e) => setVisitType(e.target.value as 'first' | 'repeat')}
+                  className="mr-3 w-5 h-5"
+                />
+                <span className="text-lg text-gray-700">再診</span>
+              </label>
+            </div>
+            <p className="text-sm text-gray-500 mt-2">※ 任意項目です。未選択でも送信できます。</p>
+          </div>
 
           {/* その他 */}
           <div>

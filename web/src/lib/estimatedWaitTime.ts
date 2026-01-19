@@ -238,45 +238,45 @@ export function getHospitalSizeType(bedCount?: number): HospitalSizeType {
 const WAIT_TIME_SCORES = {
   // 曜日
   dayOfWeek: {
-    weekday: 50,    // 平日: 標準
-    saturday: 70,   // 土曜: やや混みやすい
-    holiday: 30,    // 日祝: 比較的空きやすい
+    weekday: 40,    // 平日: 標準（30-60分）
+    saturday: 55,   // 土曜: やや混みやすい（60-90分）
+    holiday: 20,    // 日祝: 空きやすい（0-30分）
   },
   
   // 時間帯
   timeSlot: {
-    morning: 80,    // 午前: 混みやすい（朝の受診が多い）
-    afternoon: 60,  // 午後: やや混みやすい
-    evening: 40,    // 夕方: 比較的空きやすい
+    morning: 65,    // 午前: 混みやすい（60-90分）
+    afternoon: 45,  // 午後: やや混みやすい（30-60分）
+    evening: 25,    // 夕方: 空きやすい（0-30分）
   },
   
   // 診療科
   department: {
-    internal: 70,       // 内科: 混みやすい
-    pediatrics: 75,     // 小児科: 混みやすい（特に午前）
-    orthopedics: 65,    // 整形外科: やや混みやすい
-    surgery: 50,        // 外科: 標準
-    dermatology: 45,    // 皮膚科: やや空きやすい
-    ophthalmology: 55,  // 眼科: 標準
-    otolaryngology: 50, // 耳鼻咽喉科: 標準
-    urology: 45,        // 泌尿器科: やや空きやすい
-    gynecology: 60,     // 産婦人科: やや混みやすい
-    psychiatry: 40,     // 精神科: 比較的空きやすい
-    other: 50,          // その他: 標準
+    internal: 50,       // 内科: 標準（30-60分）
+    pediatrics: 60,     // 小児科: やや混みやすい（60-90分）
+    orthopedics: 50,    // 整形外科: 標準（30-60分）
+    surgery: 40,        // 外科: 標準（30-60分）
+    dermatology: 30,    // 皮膚科: 空きやすい（0-30分）
+    ophthalmology: 40,  // 眼科: 標準（30-60分）
+    otolaryngology: 40, // 耳鼻咽喉科: 標準（30-60分）
+    urology: 35,        // 泌尿器科: 空きやすい（0-30分）
+    gynecology: 50,     // 産婦人科: 標準（30-60分）
+    psychiatry: 25,     // 精神科: 空きやすい（0-30分）
+    other: 40,          // その他: 標準（30-60分）
   },
   
   // 立地
   location: {
-    urban: 75,      // 都市部: 混みやすい
-    suburban: 55,   // 郊外: やや混みやすい
-    rural: 35,      // 地方: 比較的空きやすい
+    urban: 60,      // 都市部: やや混みやすい（60-90分）
+    suburban: 40,   // 郊外: 標準（30-60分）
+    rural: 25,      // 地方: 空きやすい（0-30分）
   },
   
   // 病院規模
   hospitalSize: {
-    small: 45,      // 小規模: やや空きやすい
-    medium: 55,     // 中規模: やや混みやすい
-    large: 70,      // 大規模: 混みやすい
+    small: 30,      // 小規模: 空きやすい（0-30分）
+    medium: 45,     // 中規模: 標準（30-60分）
+    large: 60,      // 大規模: やや混みやすい（60-90分）
   },
 } as const;
 
@@ -320,30 +320,42 @@ export function calculateEstimatedWaitTime(
     scores.hospitalSize
   ) / 5;
   
-  // 4. スコアから待ち時間レベルを判定
+  // 4. スコアから待ち時間レベルを判定（5カテゴリ）
   let level: WaitTimeLevel;
   let text: string;
   let range: { min: number; max: number };
   let description: string | undefined;
   
-  if (averageScore < 40) {
-    // 比較的空きやすい
+  if (averageScore < 30) {
+    // 0-30分
     level = 'low';
-    text = '比較的空きやすい';
-    range = { min: 10, max: 30 };
-    description = '待ち時間は比較的短めになる傾向があります';
-  } else if (averageScore < 60) {
-    // やや混みやすい
+    text = '0〜30分程度';
+    range = { min: 0, max: 30 };
+    description = '待ち時間は0〜30分程度になる傾向があります';
+  } else if (averageScore < 50) {
+    // 30-60分
     level = 'medium';
-    text = 'やや混みやすい';
+    text = '30〜60分程度';
     range = { min: 30, max: 60 };
     description = '待ち時間は30〜60分程度になる傾向があります';
-  } else {
-    // 混みやすい
+  } else if (averageScore < 65) {
+    // 60-90分
+    level = 'medium';
+    text = '60〜90分程度';
+    range = { min: 60, max: 90 };
+    description = '待ち時間は60〜90分程度になる傾向があります';
+  } else if (averageScore < 80) {
+    // 90-120分
     level = 'high';
-    text = '混みやすい';
-    range = { min: 60, max: 120 };
-    description = '待ち時間は60〜120分程度になる傾向があります';
+    text = '90〜120分程度';
+    range = { min: 90, max: 120 };
+    description = '待ち時間は90〜120分程度になる傾向があります';
+  } else {
+    // 120分以上
+    level = 'high';
+    text = '120分以上';
+    range = { min: 120, max: 180 };
+    description = '待ち時間は120分以上になる傾向があります';
   }
   
   return {
@@ -361,10 +373,10 @@ export function calculateEstimatedWaitTime(
  * @returns 表示用テキスト
  */
 export function formatEstimatedWaitTime(estimatedWaitTime: EstimatedWaitTime): string {
-  const { text, range } = estimatedWaitTime;
+  const { text } = estimatedWaitTime;
   
-  // レンジ表現を追加
-  return `${text}（${range.min}〜${range.max}分程度になりやすい）`;
+  // テキストのみを返す（レンジは既に含まれている）
+  return text;
 }
 
 /**
