@@ -91,6 +91,7 @@ import {
   type HospitalInfo 
 } from '../lib/estimatedWaitTime';
 import WaitTimeChart from './WaitTimeChart';
+import AdSenseBlock from './AdSenseBlock'; // AdSenseポリシー違反解消のため、条件付きで広告を表示するコンポーネント
 
 // ===================================
 // 型定義
@@ -361,6 +362,10 @@ const SearchPage: React.FC = () => {
     }
   };
 
+  // AdSenseポリシー違反解消のため、広告表示条件を計算
+  // 広告表示OK条件: 検索結果が1件以上 かつ 施設詳細表示中ではない
+  const shouldShowAds = searchResults.length > 0 && selectedFacility === null;
+
   return (
     <div className="min-h-screen bg-gray-50">
       {/* ヘッダー */}
@@ -440,6 +445,9 @@ const SearchPage: React.FC = () => {
               results={searchResults} 
               onFacilityClick={setSelectedFacility}
             />
+
+            {/* AdSenseポリシー違反解消のため、条件付きで広告を表示 */}
+            {shouldShowAds && <AdSenseBlock />}
           </>
         ) : (
           /* 施設詳細表示 */
