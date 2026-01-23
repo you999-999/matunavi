@@ -18,7 +18,8 @@
  * - 2026年: PWA対応、AdSense統合
  */
 
-import { BrowserRouter, Routes, Route } from 'react-router-dom';
+import React, { useEffect } from 'react';
+import { BrowserRouter, Routes, Route, useLocation } from 'react-router-dom';
 
 // ===================================
 // コンポーネントのインポート
@@ -36,6 +37,23 @@ import Terms from "./pages/Terms";            // 利用規約
 import PrivacyPolicy from "./pages/PrivacyPolicy";  // プライバシーポリシー
 
 /**
+ * ScrollToTop コンポーネント
+ * 
+ * ルート変更時にページの一番上にスクロールするコンポーネント
+ * 各ページ遷移時に自動的にページトップに移動する
+ */
+const ScrollToTop: React.FC = () => {
+  const { pathname } = useLocation();
+
+  useEffect(() => {
+    // ルート変更時にページの一番上にスクロール
+    window.scrollTo(0, 0);
+  }, [pathname]);
+
+  return null;
+};
+
+/**
  * App コンポーネント
  * 
  * アプリケーション全体のルーティングを管理するルートコンポーネント。
@@ -46,6 +64,7 @@ import PrivacyPolicy from "./pages/PrivacyPolicy";  // プライバシーポリ�
 function App() {
   return (
     <BrowserRouter>
+      <ScrollToTop />
       <Routes>
         {/* トップページ - サービスの概要と導線 */}
         <Route path="/" element={<Home />} />
