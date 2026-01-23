@@ -271,6 +271,14 @@ const SearchPage: React.FC = () => {
    */
   const [selectedFacility, setSelectedFacility] = useState<SearchResult | null>(null);
 
+  // --- 検索結果エリアの参照（スクロール用） ---
+  
+  /**
+   * 検索結果エリアの参照
+   * 検索完了後にこのエリアまでスクロールするために使用
+   */
+  const searchResultsRef = useRef<HTMLDivElement>(null);
+
   // ===================================
   // イベントハンドラ
   // ===================================
@@ -355,6 +363,14 @@ const SearchPage: React.FC = () => {
 
       // 検索結果を state にセット
       setSearchResults(results);
+      
+      // 検索完了後、検索結果エリアまでスクロール（検索完了を分かりやすくするため）
+      // 次のレンダリングサイクルでスクロールするため、setTimeout を使用
+      setTimeout(() => {
+        if (searchResultsRef.current) {
+          searchResultsRef.current.scrollIntoView({ behavior: 'smooth', block: 'start' });
+        }
+      }, 100);
     } catch (error) {
       // try-catch による例外処理
       console.error('検索処理エラー:', error);
@@ -441,10 +457,12 @@ const SearchPage: React.FC = () => {
             </div>
 
             {/* 検索結果 */}
-            <SearchResults 
-              results={searchResults} 
-              onFacilityClick={setSelectedFacility}
-            />
+            <div ref={searchResultsRef}>
+              <SearchResults 
+                results={searchResults} 
+                onFacilityClick={setSelectedFacility}
+              />
+            </div>
 
             {/* AdSenseポリシー違反解消のため、条件付きで広告を表示 */}
             {shouldShowAds && <AdSenseBlock />}
